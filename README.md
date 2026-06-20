@@ -46,6 +46,17 @@ npx skills add amElnagdy/guard-skills --global
 
 Works with Claude Code, Codex, Cursor, OpenCode, and other supported agents via the [Skills CLI](https://github.com/vercel-labs/skills).
 
+## Updating
+
+Skills install as a copy, so a new version here does not reach your agent until you update. Refresh them with the Skills CLI:
+
+```bash
+npx skills update                 # all installed skills (alias: upgrade)
+npx skills update clean-code-guard
+```
+
+Add `--global` for global installs or `--project` for project installs. Re-running `npx skills add amElnagdy/guard-skills` also re-fetches the latest.
+
 ## How to use them
 
 Run a guard after your agent produces work:
