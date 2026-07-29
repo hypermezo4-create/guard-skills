@@ -8,6 +8,9 @@ on:
       - harden-clean-code-guard
     paths:
       - 'skills/**'
+      - 'registry/**'
+      - 'vendor/summary.json'
+      - 'vendor/manifest.json'
       - 'scripts/build-dashboard.mjs'
       - 'package.json'
       - 'vercel.json'
