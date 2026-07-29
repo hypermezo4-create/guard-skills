@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 
@@ -45,7 +45,7 @@ const sourceParts = String(skill.source).split('/').map((segment) =>
   segment.normalize('NFKC').trim().replace(/[^a-zA-Z0-9._-]/g, (c) => `_x${c.codePointAt(0).toString(16)}_`)
 );
 const safeSlug = String(skill.slug).normalize('NFKC').trim().replace(/[^a-zA-Z0-9._-]/g, (c) => `_x${c.codePointAt(0).toString(16)}_`);
-const localPath = join('vendor', 'skills', ...sourceParts, safeSlug);
+const localPath = resolve(process.cwd(), 'vendor', 'skills', ...sourceParts, safeSlug);
 
 console.log(`Installing vendored snapshot: ${skill.id}`);
 console.log(`Upstream hash: ${skill.upstreamHash || 'unknown'}`);
