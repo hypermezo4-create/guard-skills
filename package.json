@@ -1,6 +1,6 @@
 {
   "name": "mohammed-skills-universe",
-  "version": "2.7.0",
+  "version": "2.7.1",
   "private": true,
   "description": "Mohammed-MEZO's provenance-preserving Agent Skills hub, catalog, delegation pack, imported Agent Tools library, and guarded mirror.",
   "type": "module",
@@ -26,6 +26,6 @@
     "@vercel/oidc": "3.8.1"
   },
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   }
 }
