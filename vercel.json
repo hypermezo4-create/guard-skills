@@ -4,6 +4,11 @@
   "outputDirectory": "dist",
   "cleanUrls": true,
   "trailingSlash": false,
+  "rewrites": [
+    { "source": "/data/all-time.json", "destination": "/api/catalog?view=all-time" },
+    { "source": "/data/trending.json", "destination": "/api/catalog?view=trending" },
+    { "source": "/data/hot.json", "destination": "/api/catalog?view=hot" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
