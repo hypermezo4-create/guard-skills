@@ -59,18 +59,18 @@ PAYLOAD_FILES="$(find "$SKILLS_DIR" -type f | wc -l | tr -d ' ')"
 cat > "$ROOT/.agents/IMPORTED_FROM_MOHAMMED_AI_AGENT_TOOLS.md" <<MARKER
 # Imported Mohammed AI Agent Tools Pack
 
-This tree was materialized from the user-provided `Mohammed_AI_Agent_Tools(1).zip` inventory.
+This tree was materialized from the user-provided Mohammed_AI_Agent_Tools(1).zip inventory.
 
 - Verified top-level skills: **$FINAL_COUNT**
 - Mohammed custom skills: **$CUSTOM_COUNT**
 - Upstream-backed skills: **$((FINAL_COUNT - CUSTOM_COUNT))**
-- Inventory slug-set SHA-256: `$ACTUAL_SLUG_SET_SHA`
+- Inventory slug-set SHA-256: $ACTUAL_SLUG_SET_SHA
 - Recursive SKILL.md files: **$TOTAL_SKILL_FILES**
 - Materialized files: **$PAYLOAD_FILES**
-- Custom bundle SHA-256: `$ACTUAL_CUSTOM_SHA`
-- Upstream manifest SHA-256: `$ACTUAL_UPSTREAM_SHA`
+- Custom bundle SHA-256: $ACTUAL_CUSTOM_SHA
+- Upstream manifest SHA-256: $ACTUAL_UPSTREAM_SHA
 
-Third-party authorship and licenses remain with their upstream authors. Each upstream-backed skill records its source path and resolved Git commit in `.mohammed-import.json`.
+Third-party authorship and licenses remain with their upstream authors. Each upstream-backed skill records its source path and resolved Git commit in .mohammed-import.json.
 MARKER
 
 echo "Agent Tools materialization PASSED: $FINAL_COUNT exact top-level skills, slug inventory $ACTUAL_SLUG_SET_SHA, $TOTAL_SKILL_FILES SKILL.md files, $PAYLOAD_FILES total files."
