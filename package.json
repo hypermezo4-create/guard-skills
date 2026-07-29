@@ -1,13 +1,17 @@
 {
   "name": "mohammed-skills-universe",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Mohammed-MEZO's safety-first catalog and sync layer for the open Agent Skills ecosystem.",
+  "description": "Mohammed-MEZO's full, provenance-preserving mirror and safety layer for the open Agent Skills ecosystem.",
   "type": "module",
   "scripts": {
     "sync": "node scripts/sync-skills-sh.mjs",
     "sync:trending": "node scripts/sync-skills-sh.mjs --view trending",
     "sync:hot": "node scripts/sync-skills-sh.mjs --view hot",
+    "mirror": "node scripts/mirror-all-skills.mjs --prune",
+    "mirror:no-audits": "node scripts/mirror-all-skills.mjs --prune --no-audits",
+    "verify:mirror": "node scripts/verify-full-mirror.mjs",
+    "install:vendored": "node scripts/install-vendored-skill.mjs",
     "validate": "npx skills add . --list --full-depth"
   },
   "engines": {
