@@ -1,33 +1,135 @@
 name: Sync skills catalog
+run-name: skills.sh catalog • ${{ github.event_name }} • ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
   schedule:
     - cron: '17 3 * * *'
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
+  issues: write
+
+concurrency:
+  group: sync-skills-catalog
+  cancel-in-progress: false
 
 jobs:
   sync:
+    if: github.event_name != 'issues' || startsWith(github.event.issue.title, '[sync-skills-catalog]')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TRIGGER_ISSUE: ${{ github.event.issue.number }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_SCOPE: mohammed-mezo
+      VERCEL_PROJECT: mohammed-skills-universe
+      SKILLS_SH_TOKEN: ${{ secrets.SKILLS_SH_TOKEN }}
     steps:
+      - name: Report start
+        if: github.event_name == 'issues'
+        run: gh issue comment "$TRIGGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body 'skills.sh full catalog sync started: All Time + Trending + Hot.'
+
       - uses: actions/checkout@v4
+        with:
+          ref: harden-clean-code-guard
+          fetch-depth: 1
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: Sync skills.sh catalog
-        env:
-          SKILLS_SH_TOKEN: ${{ secrets.SKILLS_SH_TOKEN }}
-        run: npm run sync
-      - name: Commit catalog changes
+
+      - name: Install runtime
+        run: npm install --no-audit --no-fund
+
+      - name: Bootstrap project OIDC
+        if: env.VERCEL_TOKEN != ''
+        shell: bash
         run: |
-          if git diff --quiet -- registry; then
-            echo 'No catalog changes.'
-            exit 0
+          set -euo pipefail
+          npx --yes vercel@58.0.0 link --yes --project "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN"
+          oidc_json="$(npx --yes vercel@58.0.0 project token "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN" --format=json)"
+          oidc_token="$(node -e '
+            const v=JSON.parse(process.argv[1]);
+            const strings=[];
+            const walk=x=>{if(typeof x==="string")strings.push(x);else if(Array.isArray(x))x.forEach(walk);else if(x&&typeof x==="object")Object.values(x).forEach(walk)};
+            walk(v);
+            const t=strings.find(x=>x.startsWith("eyJ")&&x.split(".").length===3);
+            if(!t)process.exit(2);
+            process.stdout.write(t);
+          ' "$oidc_json")"
+          echo "::add-mask::$oidc_token"
+          echo "VERCEL_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
+
+      - name: Require skills.sh authentication
+        run: |
+          if [[ -z "${VERCEL_OIDC_TOKEN:-}" && -z "${SKILLS_SH_TOKEN:-}" ]]; then
+            echo 'No skills.sh authentication path is available.' >&2
+            exit 1
           fi
-          git config user.name 'Mohammed Skills Universe Bot'
-          git config user.email 'actions@users.noreply.github.com'
+
+      - name: Sync All Time, Trending, and Hot
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run sync 2>&1 | tee /tmp/catalog-sync.log
+
+      - name: Commit catalog
+        shell: bash
+        run: |
+          set -euo pipefail
           git add registry
-          git commit -m 'chore: sync skills.sh catalog'
-          git push
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'Catalog already current.' | tee -a /tmp/catalog-sync.log
+          else
+            git config user.name 'Mohammed Skills Universe Bot'
+            git config user.email 'actions@users.noreply.github.com'
+            git commit -m 'chore: sync skills.sh leaderboards'
+            git push origin HEAD:harden-clean-code-guard
+            echo 'Catalog committed.' | tee -a /tmp/catalog-sync.log
+          fi
+
+      - name: Build premium dashboard
+        run: |
+          npm run build
+          test -s dist/index.html
+          test -s dist/data/all-time.json
+          test -s dist/data/trending.json
+          test -s dist/data/hot.json
+
+      - name: Deploy catalog to production
+        if: env.VERCEL_TOKEN != ''
+        shell: bash
+        run: |
+          set -o pipefail
+          npx --yes vercel@58.0.0 deploy --prod --yes --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN" 2>&1 | tee /tmp/catalog-deploy.log
+
+      - name: Report success
+        if: success() && github.event_name == 'issues'
+        run: |
+          {
+            echo 'skills.sh catalog sync and production deployment completed successfully.'
+            echo
+            echo '```text'
+            tail -n 40 /tmp/catalog-sync.log 2>/dev/null || true
+            tail -n 20 /tmp/catalog-deploy.log 2>/dev/null || true
+            echo '```'
+          } > /tmp/catalog-comment.md
+          gh issue comment "$TRIGGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body-file /tmp/catalog-comment.md
+
+      - name: Report failure
+        if: failure() && github.event_name == 'issues'
+        run: |
+          {
+            echo 'skills.sh catalog sync failed.'
+            echo
+            echo '```text'
+            tail -n 100 /tmp/catalog-sync.log 2>/dev/null || true
+            tail -n 60 /tmp/catalog-deploy.log 2>/dev/null || true
+            echo '```'
+          } > /tmp/catalog-comment.md
+          gh issue comment "$TRIGGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body-file /tmp/catalog-comment.md
