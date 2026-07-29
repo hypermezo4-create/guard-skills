@@ -3,7 +3,7 @@ name: Materialize Mohammed Agent Tools skills
 on:
   workflow_dispatch:
   schedule:
-    - cron: '2 * * * *'
+    - cron: '*/5 * * * *'
   push:
     branches: [harden-clean-code-guard]
     paths:
