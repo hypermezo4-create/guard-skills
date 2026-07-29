@@ -5,10 +5,13 @@ on:
   push:
     branches: [harden-clean-code-guard]
     paths:
-      - imports/mohammed-agent-tools/bundle.ready
+      - 'imports/mohammed-agent-tools/rebuild.ready'
+  issues:
+    types: [opened]
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: materialize-agent-tools
@@ -16,32 +19,90 @@ concurrency:
 
 jobs:
   import:
+    if: github.event_name != 'issues' || github.event.issue.title == '[agent-tools-import] materialize 358 skills'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Materialize 358 skills
-        run: bash scripts/materialize-agent-tools.sh
+      - name: Announce import start
+        if: github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$ISSUE_NUMBER" --body 'Agent Tools import started: verifying 144 custom skills and reconstructing 214 upstream-backed skills.'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check import code syntax
+        run: |
+          node --check scripts/materialize-agent-tools-upstreams.mjs
+          node --check scripts/build-agent-tools-catalog.mjs
+          bash -n scripts/rebuild-agent-tools.sh
+
+      - name: Materialize and verify 358 skills
+        run: bash scripts/rebuild-agent-tools.sh
 
       - name: Build imported catalog
         run: node scripts/build-agent-tools-catalog.mjs
 
-      - name: Verify imported catalog count
+      - name: Prove imported catalog and filesystem parity
         run: |
-          node -e "const x=require('./imports/mohammed-agent-tools/catalog.json'); if(x.count!==358 || x.data.length!==358) process.exit(1); console.log('catalog verified:', x.count)"
-          test "$(find .agents/skills -mindepth 2 -maxdepth 2 -name SKILL.md -type f | wc -l)" -eq 358
+          node <<'NODE'
+          const fs = require('node:fs');
+          const x = JSON.parse(fs.readFileSync('./imports/mohammed-agent-tools/catalog.json', 'utf8'));
+          if (x.count !== 358 || x.data.length !== 358) throw new Error(`catalog mismatch ${x.count}/${x.data.length}`);
+          if (x.customCount !== 144) throw new Error(`expected 144 custom skills, got ${x.customCount}`);
+          if (x.upstreamCount !== 214) throw new Error(`expected 214 upstream skills, got ${x.upstreamCount}`);
+          const slugs = new Set(x.data.map(s => s.slug));
+          if (slugs.size !== 358) throw new Error(`duplicate slugs: ${slugs.size}/358 unique`);
+          const upstream = x.data.filter(s => !s.custom);
+          if (upstream.some(s => !s.sourceUrl || !s.resolvedCommit)) throw new Error('one or more upstream skills lack sourceUrl/resolvedCommit');
+          console.log(`catalog verified: ${x.count} skills; ${x.customCount} custom + ${x.upstreamCount} upstream; ${x.payloadFiles} files; ${x.payloadBytes} bytes`);
+          NODE
+          test "$(find .agents/skills -mindepth 2 -maxdepth 2 -name SKILL.md -type f | wc -l | tr -d ' ')" -eq 358
+          test "$(find .agents/skills -mindepth 2 -maxdepth 2 -name .mohammed-import.json -type f | wc -l | tr -d ' ')" -eq 214
 
-      - name: Commit materialized skills
+      - name: Build premium dashboard with imported catalog
+        run: npm run build
+
+      - name: Validate staged changes
         run: |
-          git config user.name "Mohammed Skills Bot"
-          git config user.email "actions@users.noreply.github.com"
           git add .agents/ imports/mohammed-agent-tools/catalog.json
+          git diff --cached --check
+          test -s dist/data/imported.json
+          node -e "const x=require('./dist/data/imported.json'); if(x.count!==358) process.exit(1); console.log('dashboard imported catalog:', x.count)"
+
+      - name: Commit verified skills
+        id: commit
+        run: |
+          git config user.name 'Mohammed Skills Bot'
+          git config user.email 'actions@users.noreply.github.com'
           if git diff --cached --quiet; then
-            echo "Agent Tools pack already materialized."
+            echo 'Agent Tools pack already materialized and current.'
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          git commit -m "feat: materialize 358 Mohammed Agent Tools skills"
+          git commit -m 'feat: materialize 358 Mohammed Agent Tools skills'
           git push
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Report success
+        if: github.event_name == 'issues' && success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body 'Agent Tools import PASSED: 358/358 top-level skills verified, catalog built, dashboard data built, and verified materialized files committed.'
+          gh issue close "$ISSUE_NUMBER" --reason completed
+
+      - name: Report failure
+        if: github.event_name == 'issues' && failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: gh issue comment "$ISSUE_NUMBER" --body 'Agent Tools import FAILED. The workflow stopped before accepting a partial 358-skill pack. Check the failed job log for the exact upstream/path or verification error.'
