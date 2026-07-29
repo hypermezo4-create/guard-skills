@@ -9,12 +9,11 @@ const manifest = JSON.parse(await readFile(join(vendorRoot, 'manifest.json'), 'u
 const summary = JSON.parse(await readFile(join(vendorRoot, 'summary.json'), 'utf8'));
 const failures = JSON.parse(await readFile(join(vendorRoot, 'failures.json'), 'utf8'));
 
-function safe(value) {
-  return String(value).normalize('NFKC').trim().replace(/[^a-zA-Z0-9._-]/g, (c) => `_x${c.codePointAt(0).toString(16)}_`);
-}
-
 function dirFor(entry) {
-  return join(vendorRoot, 'skills', ...String(entry.source).split('/').map(safe), safe(entry.slug));
+  if (!entry.localPath) throw new Error('missing localPath');
+  const parts = String(entry.localPath).split('/');
+  if (parts.some((part) => !part || part === '.' || part === '..')) throw new Error(`unsafe localPath: ${entry.localPath}`);
+  return join(vendorRoot, ...parts);
 }
 
 async function collectFiles(dir, base = dir) {
@@ -50,20 +49,46 @@ if (summary.apiReportedTotal != null && manifest.count !== summary.apiReportedTo
 if (failures.count !== 0) errors.push(`${failures.count} mirror failures remain`);
 if (summary.unavailable !== 0) errors.push(`${summary.unavailable} skills have no snapshot`);
 
+const seenIds = new Set();
+const seenPaths = new Set();
+for (const entry of manifest.data || []) {
+  if (seenIds.has(entry.id)) errors.push(`${entry.id}: duplicate manifest id`);
+  seenIds.add(entry.id);
+
+  if (!entry.localPath) {
+    errors.push(`${entry.id}: missing localPath`);
+  } else if (seenPaths.has(entry.localPath)) {
+    errors.push(`${entry.id}: localPath collision at ${entry.localPath}`);
+  } else {
+    seenPaths.add(entry.localPath);
+  }
+}
+
 let verified = 0;
 for (const entry of manifest.data || []) {
   if (!entry.mirrored) {
     errors.push(`${entry.id}: not mirrored (${entry.status || 'unknown'})`);
     continue;
   }
+
   try {
     const dir = dirFor(entry);
     const files = await collectFiles(dir);
     if (!files.some((file) => file.path === 'SKILL.md')) errors.push(`${entry.id}: missing SKILL.md`);
+    if (!entry.upstreamHash) errors.push(`${entry.id}: missing upstream hash`);
+
     const localHash = hashFiles(files);
     if (entry.localHash !== localHash) errors.push(`${entry.id}: local hash mismatch`);
+
     const metadata = JSON.parse(await readFile(join(dir, '.upstream.json'), 'utf8'));
-    if (metadata.id !== entry.id || metadata.localHash !== entry.localHash) errors.push(`${entry.id}: metadata mismatch`);
+    if (
+      metadata.id !== entry.id
+      || metadata.localHash !== entry.localHash
+      || metadata.upstreamHash !== entry.upstreamHash
+      || metadata.localPath !== entry.localPath
+    ) {
+      errors.push(`${entry.id}: metadata mismatch`);
+    }
     verified += 1;
   } catch (error) {
     errors.push(`${entry.id}: ${String(error.message || error)}`);
@@ -78,4 +103,4 @@ if (errors.length) {
   process.exit(1);
 }
 
-console.log('Full mirror verification PASSED: catalog count, snapshots, SKILL.md files, metadata, and local hashes are complete.');
+console.log('Full mirror verification PASSED: catalog parity, unique snapshot paths, SKILL.md files, provenance metadata, upstream hashes, and local hashes are complete.');
