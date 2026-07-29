@@ -1,0 +1,55 @@
+name: Sync delegate skills
+run-name: Delegate skills sync • ${{ github.event_name }} • ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
+  push:
+    branches:
+      - harden-clean-code-guard
+    paths:
+      - 'scripts/sync-delegate-skills.sh'
+      - '.github/workflows/sync-delegate-skills.yml'
+      - 'package.json'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-delegate-skills
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Sync reviewed delegate pack
+        run: bash scripts/sync-delegate-skills.sh
+
+      - name: Validate repository skill discovery
+        run: npx --yes skills add . --list --full-depth
+
+      - name: Check generated diff
+        run: git diff --check
+
+      - name: Commit delegate pack when changed
+        run: |
+          if git diff --quiet -- skills/ third_party/delegate-skills/; then
+            echo 'Delegate skills are already current.'
+            exit 0
+          fi
+          git config user.name 'Mohammed Skills Universe Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add skills/ third_party/delegate-skills/
+          git commit -m 'chore: sync reviewed delegate skills from upstream'
+          git push
