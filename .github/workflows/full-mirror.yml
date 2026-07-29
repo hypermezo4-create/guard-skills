@@ -27,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 330
     env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_SCOPE: ${{ secrets.VERCEL_SCOPE }}
       SKILLS_SH_TOKEN: ${{ secrets.SKILLS_SH_TOKEN }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
@@ -38,11 +40,42 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Mirror every indexed skill with files and audits
-        run: npm run mirror
+      - name: Install mirror runtime
+        run: npm install --no-audit --no-fund
 
-      - name: Prove mirror completeness
-        run: npm run verify:mirror
+      - name: Bootstrap refreshable Vercel OIDC
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${VERCEL_TOKEN:-}" ]]; then
+            args=(--yes --project mohammed-skills-universe --token "$VERCEL_TOKEN")
+            if [[ -n "${VERCEL_SCOPE:-}" ]]; then
+              args+=(--scope "$VERCEL_SCOPE")
+            fi
+            npx --yes vercel@58.0.0 link "${args[@]}"
+            npx --yes vercel@58.0.0 env pull .env.mirror --yes --environment=development --token="$VERCEL_TOKEN"
+            echo 'Using Vercel OIDC authentication for skills.sh.'
+          elif [[ -n "${SKILLS_SH_TOKEN:-}" ]]; then
+            echo 'VERCEL_TOKEN is not configured; using SKILLS_SH_TOKEN fallback.'
+          else
+            echo 'Missing authentication. Configure repository secret VERCEL_TOKEN (preferred) or SKILLS_SH_TOKEN.' >&2
+            exit 1
+          fi
+
+      - name: Mirror and prove every indexed snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f .env.mirror ]]; then
+            set -a
+            source .env.mirror
+            set +a
+          fi
+          npm run mirror:strict
+
+      - name: Remove ephemeral credentials
+        if: always()
+        run: rm -f .env.mirror
 
       - name: Commit verified mirror
         run: |
