@@ -94,13 +94,18 @@ jobs:
         run: npm run mirror:strict
 
       - name: Commit verified mirror
+        shell: bash
         run: |
-          if git diff --quiet -- vendor; then
+          set -euo pipefail
+          changes="$(git status --porcelain -- vendor/)"
+          if [[ -z "$changes" ]]; then
             echo 'Mirror is already current.'
             exit 0
           fi
+          printf '%s\n' "$changes"
           git config user.name 'Mohammed Skills Universe Bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add vendor
+          git add vendor/
+          git diff --cached --check
           git commit -m 'chore: refresh complete skills mirror'
           git push
