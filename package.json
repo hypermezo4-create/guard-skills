@@ -1,0 +1,16 @@
+{
+  "name": "mohammed-skills-universe",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mohammed-MEZO's safety-first catalog and sync layer for the open Agent Skills ecosystem.",
+  "type": "module",
+  "scripts": {
+    "sync": "node scripts/sync-skills-sh.mjs",
+    "sync:trending": "node scripts/sync-skills-sh.mjs --view trending",
+    "sync:hot": "node scripts/sync-skills-sh.mjs --view hot",
+    "validate": "npx skills add . --list --full-depth"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
