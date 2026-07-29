@@ -13,6 +13,12 @@ __pycache__/
 node_modules/
 vendor/.tmp/
 
+# Local environment and Vercel linkage. Never commit credentials.
+.env
+.env.*
+!.env.example
+.vercel/
+
 # macOS/editor noise.
 .DS_Store
 *.swp
