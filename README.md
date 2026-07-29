@@ -2,152 +2,138 @@
 
 [![skills.sh](https://skills.sh/b/hypermezo4-create/guard-skills)](https://skills.sh/hypermezo4-create/guard-skills)
 
-A safety-first Agent Skills hub maintained by **Mohammed-MEZO** (`hypermezo4-create`). It keeps the original guard-skills pack, adds Mohammed-specific routing/auditing skills, and provides tooling to synchronize the changing skills.sh catalog into a searchable local registry.
+A full Agent Skills hub maintained by **Mohammed-MEZO** (`hypermezo4-create`). It combines the built-in guard pack, Mohammed-specific routing/auditing skills, a complete skills.sh file mirror, offline search, guarded local installation, provenance, hashes, security audits, and automated completeness verification.
 
-> This project does **not** claim authorship of third-party skills. Original authors, sources, licenses, and provenance stay intact. See [ATTRIBUTION.md](ATTRIBUTION.md).
+> Third-party skills remain attributed to their original authors/sources and licenses. Mohammed-MEZO is the maintainer of this mirror and its own repository-local tooling/skills, not the original author of unrelated upstream work.
 
-## What is included
+## Architecture
 
-### Built-in guard skills
+There are two layers:
 
-The original focused guard pack remains available:
+1. `skills/` — trusted repository-local skills that the normal Skills CLI can discover directly.
+2. `vendor/skills/` — the complete external universe mirror. It is intentionally isolated so thousands of third-party skills are not automatically loaded or trusted just because the files exist in this repository.
+
+### Repository-local skills
 
 - `clean-code-guard`
 - `test-guard`
 - `docs-guard`
 - `wp-guard`
 - `woo-guard`
+- `mohammed-meta-router`
+- `mohammed-skill-auditor`
 
-These are second-pass quality gates for generated code, tests, documentation, WordPress, and WooCommerce work.
+## Full skills.sh mirror
 
-### Mohammed skills
+```bash
+npm run mirror
+```
 
-- `mohammed-meta-router` — chooses the smallest, most relevant trusted skill for a task and avoids invented skill names.
-- `mohammed-skill-auditor` — reviews provenance, executable behavior, credentials, network access, destructive actions, and audit evidence before trusting a third-party skill.
+The mirror engine paginates through the complete all-time skills.sh catalog and, for every indexed skill, requests the detailed snapshot containing its full file tree and upstream hash. It preserves duplicates instead of silently dropping them, collects available external audit results, computes a local content hash, records basic local risk signals, stores source/license metadata when available, and mirrors the upstream files under `vendor/skills/`.
 
-### Global catalog sync
+The official API exposes stable skill IDs, full skill file trees, SHA-256 content hashes, duplicate markers, and audit results. The mirror uses those fields as its upstream source of truth.
 
-`scripts/sync-skills-sh.mjs` reads the official skills.sh API and generates:
+### Prove that the mirror is complete
 
-- `registry/skills.json`
-- `registry/sources.json`
-- `registry/summary.json`
+```bash
+npm run verify:mirror
+```
 
-The sync is paginated, deduplicates by stable skill ID, preserves upstream source/install links, and does **not** execute third-party skill code.
+The verifier fails unless all of these are true:
 
-## Install this pack
+- manifest count equals the API-reported total;
+- zero mirror failures remain;
+- zero skill snapshots are unavailable;
+- every mirrored skill contains `SKILL.md`;
+- every local deterministic hash matches the manifest;
+- every `.upstream.json` identity/hash matches the manifest.
 
-List everything directly included in this repository:
+A run is not called complete unless this command passes.
+
+## Offline search
+
+```bash
+npm run find:vendored -- react
+npm run find:vendored -- "next js" --limit=50
+npm run find:vendored -- security --include-blocked --json
+```
+
+Search works against the local `vendor/manifest.json`, so discovery does not require loading thousands of skills into model context.
+
+## Install a mirrored skill
+
+```bash
+npm run install:vendored -- vercel-labs/skills/find-skills
+```
+
+The installer resolves the exact vendored snapshot and installs from the local directory through the Skills CLI. Entries marked `blocked-by-default` are refused unless a human explicitly reviews them and intentionally supplies `--force`.
+
+## Install this repository's trusted local pack
 
 ```bash
 npx skills add hypermezo4-create/guard-skills --list
-```
-
-Install the full local pack:
-
-```bash
 npx skills add hypermezo4-create/guard-skills
 ```
 
-Install only Mohammed's router/auditor:
+Install Mohammed's routing/auditing layer only:
 
 ```bash
 npx skills add hypermezo4-create/guard-skills --skill mohammed-meta-router
 npx skills add hypermezo4-create/guard-skills --skill mohammed-skill-auditor
 ```
 
-Install a guard:
+## Authentication
+
+The official skills.sh v1 API requires authenticated Vercel OIDC access. The mirror accepts a current token via:
 
 ```bash
-npx skills add hypermezo4-create/guard-skills --skill clean-code-guard
-npx skills add hypermezo4-create/guard-skills --skill test-guard
-npx skills add hypermezo4-create/guard-skills --skill docs-guard
-npx skills add hypermezo4-create/guard-skills --skill wp-guard
-npx skills add hypermezo4-create/guard-skills --skill woo-guard
+VERCEL_OIDC_TOKEN=... npm run mirror
 ```
 
-Install for a specific supported agent:
+For automation it also accepts the compatibility environment name `SKILLS_SH_TOKEN`. Tokens are never written into generated files.
 
-```bash
-npx skills add hypermezo4-create/guard-skills --skill '*' --agent codex
-npx skills add hypermezo4-create/guard-skills --skill mohammed-meta-router --agent cursor
-```
+## Automation
 
-## Sync the skills.sh ecosystem
+`.github/workflows/full-mirror.yml` performs the full mirror, runs the completeness verifier, and commits the generated `vendor/` snapshot only after verification succeeds. It also runs on a weekly schedule and can be dispatched manually.
 
-Requirements:
+The lighter `.github/workflows/sync-skills.yml` remains available for metadata-only catalog synchronization.
 
-- Node.js 20+
-- an authenticated skills.sh API bearer token supplied as `VERCEL_OIDC_TOKEN` or `SKILLS_SH_TOKEN`
-
-Run:
-
-```bash
-npm run sync
-```
-
-Other views:
-
-```bash
-npm run sync:trending
-npm run sync:hot
-```
-
-The skills.sh API is the source of truth for the external catalog. The generated registry is a snapshot and will change as the ecosystem changes.
-
-## Why the catalog is metadata-first
-
-Installing or rehosting every public skill blindly would create three problems: stale copies, license/attribution violations, and a large supply-chain attack surface. This repository therefore separates **discovery** from **trust**.
-
-A catalog match tells you that a skill exists. Before enabling a new third-party skill, verify its source, inspect its files, review current audits when available, understand credentials/network access, and confirm its license. See [SECURITY.md](SECURITY.md).
-
-## Repository layout
+## Generated mirror layout
 
 ```text
-.
-├── skills/
-│   ├── clean-code-guard/
-│   ├── docs-guard/
-│   ├── test-guard/
-│   ├── woo-guard/
-│   ├── wp-guard/
-│   ├── mohammed-meta-router/
-│   └── mohammed-skill-auditor/
-├── scripts/
-│   └── sync-skills-sh.mjs
-├── registry/
-│   └── README.md
-├── .github/workflows/
-│   └── sync-skills.yml
-├── ATTRIBUTION.md
-├── SECURITY.md
-└── package.json
+vendor/
+├── manifest.json
+├── summary.json
+├── failures.json
+├── licenses.json
+└── skills/
+    └── <source...>/<slug>/
+        ├── SKILL.md
+        ├── ...all upstream skill files...
+        └── .upstream.json
 ```
 
-## Validate local skills
+Each `.upstream.json` records provenance, upstream/local hashes, install count, duplicate status, audits, license metadata when available, local risk findings, and installation policy.
+
+## Useful commands
 
 ```bash
+npm run mirror
+npm run verify:mirror
+npm run find:vendored -- <query>
+npm run install:vendored -- <skill-id>
+npm run sync
 npm run validate
 ```
 
-This asks the Skills CLI to discover the local package at full depth so the repository structure can be checked before publishing changes.
+## Security model
 
-## Updating installed skills
+The repository mirrors knowledge broadly but trusts narrowly. A risky or failed-audit skill is retained for inspection and comparison, not silently deleted, while installation is blocked by default. See `SECURITY.md`.
 
-```bash
-npx skills update
-```
+## Attribution
 
-Or update one skill:
-
-```bash
-npx skills update clean-code-guard
-```
-
-## Upstream credit
-
-The original guard pack is from `amElnagdy/guard-skills`. This fork keeps that credit and its existing license. The skills.sh ecosystem is made up of many independent authors and repositories; indexing them here does not transfer authorship to this project.
+The original guard pack comes from `amElnagdy/guard-skills`. The wider skills.sh ecosystem contains independent repositories, organizations, domains, and authors. Their identity and licensing remain upstream-owned. See `ATTRIBUTION.md`.
 
 ## License
 
-Repository-local code and inherited guard content remain subject to the existing repository license. Third-party catalog entries and any upstream content remain subject to their own source licenses.
+Repository-local code and inherited guard content remain subject to the repository's existing license. Mirrored third-party content remains subject to each upstream source's license and terms.

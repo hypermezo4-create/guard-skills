@@ -1,0 +1,31 @@
+name: Validate mirror code
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/**'
+      - 'skills/mohammed-meta-router/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Check JavaScript syntax
+        run: |
+          node --check scripts/sync-skills-sh.mjs
+          node --check scripts/mirror-all-skills.mjs
+          node --check scripts/verify-full-mirror.mjs
+          node --check scripts/find-vendored-skill.mjs
+          node --check scripts/install-vendored-skill.mjs
+      - name: Check package metadata
+        run: node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log('package.json OK')"
