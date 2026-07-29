@@ -3,15 +3,15 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 IMPORT_DIR="$ROOT/imports/mohammed-agent-tools"
-BUNDLE_B64="$IMPORT_DIR/skills.tar.xz.b64"
+BUNDLE_DIR="$IMPORT_DIR/bundle"
 EXPECTED_FILE="$IMPORT_DIR/bundle.sha256"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-[[ -f "$BUNDLE_B64" ]] || { echo "missing $BUNDLE_B64" >&2; exit 1; }
+compgen -G "$BUNDLE_DIR/skills.tar.xz.b64.part-*" >/dev/null || { echo "missing bundle parts in $BUNDLE_DIR" >&2; exit 1; }
 [[ -f "$EXPECTED_FILE" ]] || { echo "missing $EXPECTED_FILE" >&2; exit 1; }
 
-base64 --decode "$BUNDLE_B64" > "$TMP_DIR/skills.tar.xz"
+cat "$BUNDLE_DIR"/skills.tar.xz.b64.part-* | tr -d '\n\r' | base64 --decode > "$TMP_DIR/skills.tar.xz"
 EXPECTED="$(awk '{print $1}' "$EXPECTED_FILE")"
 ACTUAL="$(sha256sum "$TMP_DIR/skills.tar.xz" | awk '{print $1}')"
 [[ "$EXPECTED" == "$ACTUAL" ]] || { echo "bundle sha256 mismatch" >&2; exit 1; }
