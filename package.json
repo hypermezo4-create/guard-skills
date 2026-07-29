@@ -9,6 +9,7 @@
     "sync:trending": "node scripts/sync-skills-sh.mjs --view trending",
     "sync:hot": "node scripts/sync-skills-sh.mjs --view hot",
     "mirror": "node scripts/mirror-all-skills.mjs --prune",
+    "mirror:strict": "node scripts/mirror-all-skills.mjs --prune && node scripts/verify-full-mirror.mjs",
     "mirror:no-audits": "node scripts/mirror-all-skills.mjs --prune --no-audits",
     "verify:mirror": "node scripts/verify-full-mirror.mjs",
     "find:vendored": "node scripts/find-vendored-skill.mjs",
