@@ -8,22 +8,38 @@ on:
       - 'imports/mohammed-agent-tools/rebuild.ready'
   issues:
     types: [opened]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'imports/mohammed-agent-tools/rebuild.ready'
 
 permissions:
   contents: write
   issues: write
+  pull-requests: write
 
 concurrency:
-  group: materialize-agent-tools
+  group: materialize-agent-tools-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
   import:
-    if: github.event_name != 'issues' || github.event.issue.title == '[agent-tools-import] materialize 358 skills'
+    if: >-
+      (github.event_name != 'issues' || github.event.issue.title == '[agent-tools-import] materialize 358 skills') &&
+      (github.event_name != 'pull_request' || github.event.pull_request.title == '[agent-tools-import] materialize 358 skills')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout PR head
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - name: Checkout triggering branch
+        if: github.event_name != 'pull_request'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -33,6 +49,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: gh issue comment "$ISSUE_NUMBER" --body 'Agent Tools import started: verifying 144 custom skills and reconstructing 214 upstream-backed skills.'
+
+      - name: Announce PR import start
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR_NUMBER" --body '358-skill import run started. Partial output will not be committed.'
 
       - uses: actions/setup-node@v4
         with:
@@ -79,6 +102,8 @@ jobs:
 
       - name: Commit verified skills
         id: commit
+        env:
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
         run: |
           git config user.name 'Mohammed Skills Bot'
           git config user.email 'actions@users.noreply.github.com'
@@ -88,10 +113,28 @@ jobs:
             exit 0
           fi
           git commit -m 'feat: materialize 358 Mohammed Agent Tools skills'
-          git push
+          if [[ -n "${PR_HEAD:-}" ]]; then
+            git push origin "HEAD:${PR_HEAD}"
+          else
+            git push
+          fi
           echo 'changed=true' >> "$GITHUB_OUTPUT"
 
-      - name: Report success
+      - name: Report success on PR
+        if: github.event_name == 'pull_request' && success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR_NUMBER" --body 'Import PASSED: 358/358 top-level skills verified, provenance catalog built, dashboard data built, and verified files committed to this PR branch.'
+
+      - name: Report failure on PR
+        if: github.event_name == 'pull_request' && failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: gh pr comment "$PR_NUMBER" --body 'Import FAILED before accepting a partial pack. Inspect the failed job log for the exact upstream/path or verification error.'
+
+      - name: Report success on issue
         if: github.event_name == 'issues' && success()
         env:
           GH_TOKEN: ${{ github.token }}
@@ -100,7 +143,7 @@ jobs:
           gh issue comment "$ISSUE_NUMBER" --body 'Agent Tools import PASSED: 358/358 top-level skills verified, catalog built, dashboard data built, and verified materialized files committed.'
           gh issue close "$ISSUE_NUMBER" --reason completed
 
-      - name: Report failure
+      - name: Report failure on issue
         if: github.event_name == 'issues' && failure()
         env:
           GH_TOKEN: ${{ github.token }}
