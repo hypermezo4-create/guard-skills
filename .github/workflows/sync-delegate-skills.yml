@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: sync-delegate-skills
@@ -24,10 +25,17 @@ concurrency:
 
 jobs:
   sync:
-    if: github.event_name != 'issues' || github.event.issue.title == '[sync-delegate-skills]'
+    if: github.event_name != 'issues' || startsWith(github.event.issue.title, '[sync-delegate-skills]')
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TRIGGER_ISSUE: ${{ github.event.issue.number }}
     steps:
+      - name: Report start
+        if: github.event_name == 'issues'
+        run: gh issue comment "$TRIGGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body 'Delegate skills sync started.'
+
       - uses: actions/checkout@v4
         with:
           ref: harden-clean-code-guard
@@ -38,10 +46,17 @@ jobs:
           node-version: '20'
 
       - name: Sync reviewed delegate pack
-        run: bash scripts/sync-delegate-skills.sh
+        id: upstream_sync
+        shell: bash
+        run: |
+          set -o pipefail
+          bash scripts/sync-delegate-skills.sh 2>&1 | tee /tmp/delegate-sync.log
 
       - name: Validate repository skill discovery
-        run: npx --yes skills add . --list --full-depth
+        shell: bash
+        run: |
+          set -o pipefail
+          npx --yes skills add . --list --full-depth 2>&1 | tee -a /tmp/delegate-sync.log
 
       - name: Check generated diff
         run: git diff --check
@@ -49,7 +64,7 @@ jobs:
       - name: Commit delegate pack when changed
         run: |
           if git diff --quiet -- skills/ third_party/delegate-skills/; then
-            echo 'Delegate skills are already current.'
+            echo 'Delegate skills are already current.' | tee -a /tmp/delegate-sync.log
             exit 0
           fi
           git config user.name 'Mohammed Skills Universe Bot'
@@ -57,3 +72,28 @@ jobs:
           git add skills/ third_party/delegate-skills/
           git commit -m 'chore: sync reviewed delegate skills from upstream'
           git push origin HEAD:harden-clean-code-guard
+          echo 'Delegate skills committed to harden-clean-code-guard.' | tee -a /tmp/delegate-sync.log
+
+      - name: Report success
+        if: success() && github.event_name == 'issues'
+        run: |
+          {
+            echo 'Delegate skills sync completed successfully.'
+            echo
+            echo '```text'
+            tail -n 80 /tmp/delegate-sync.log 2>/dev/null || true
+            echo '```'
+          } > /tmp/delegate-comment.md
+          gh issue comment "$TRIGGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body-file /tmp/delegate-comment.md
+
+      - name: Report failure
+        if: failure() && github.event_name == 'issues'
+        run: |
+          {
+            echo 'Delegate skills sync failed.'
+            echo
+            echo '```text'
+            tail -n 120 /tmp/delegate-sync.log 2>/dev/null || echo 'No sync log was produced.'
+            echo '```'
+          } > /tmp/delegate-comment.md
+          gh issue comment "$TRIGGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body-file /tmp/delegate-comment.md
