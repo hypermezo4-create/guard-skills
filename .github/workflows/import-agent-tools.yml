@@ -2,6 +2,8 @@ name: Materialize Mohammed Agent Tools skills
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '2 * * * *'
   push:
     branches: [harden-clean-code-guard]
     paths:
@@ -43,7 +45,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Announce import start
+      - name: Announce scheduled import start
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh issue comment 8 --body 'Scheduled 358-skill import started on the default branch. Verifying 144 custom + 214 upstream-backed skills; no partial result will be committed.'
+
+      - name: Announce issue import start
         if: github.event_name == 'issues'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -68,7 +76,10 @@ jobs:
           bash -n scripts/rebuild-agent-tools.sh
 
       - name: Materialize and verify 358 skills
-        run: bash scripts/rebuild-agent-tools.sh
+        shell: bash
+        run: |
+          set -o pipefail
+          bash scripts/rebuild-agent-tools.sh 2>&1 | tee /tmp/agent-tools-import.log
 
       - name: Build imported catalog
         run: node scripts/build-agent-tools-catalog.mjs
@@ -119,6 +130,23 @@ jobs:
             git push
           fi
           echo 'changed=true' >> "$GITHUB_OUTPUT"
+
+      - name: Report scheduled success
+        if: github.event_name == 'schedule' && success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment 8 --body 'Scheduled import PASSED: 358/358 top-level skills verified, provenance catalog built, dashboard data built, and verified files committed to the default branch.'
+          gh issue close 8 --reason completed
+
+      - name: Report scheduled failure with log tail
+        if: github.event_name == 'schedule' && failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          LOG="$(tail -n 60 /tmp/agent-tools-import.log 2>/dev/null || true)"
+          printf -v BODY 'Scheduled import FAILED before accepting a partial pack. Last materializer output:\n\n```text\n%s\n```' "$LOG"
+          gh issue comment 8 --body "$BODY"
 
       - name: Report success on PR
         if: github.event_name == 'pull_request' && success()
