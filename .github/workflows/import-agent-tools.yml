@@ -1,0 +1,47 @@
+name: Materialize Mohammed Agent Tools skills
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [harden-clean-code-guard]
+    paths:
+      - imports/mohammed-agent-tools/bundle.ready
+
+permissions:
+  contents: write
+
+concurrency:
+  group: materialize-agent-tools
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Materialize 358 skills
+        run: bash scripts/materialize-agent-tools.sh
+
+      - name: Build imported catalog
+        run: node scripts/build-agent-tools-catalog.mjs
+
+      - name: Verify imported catalog count
+        run: |
+          node -e "const x=require('./imports/mohammed-agent-tools/catalog.json'); if(x.count!==358 || x.data.length!==358) process.exit(1); console.log('catalog verified:', x.count)"
+          test "$(find .agents/skills -mindepth 2 -maxdepth 2 -name SKILL.md -type f | wc -l)" -eq 358
+
+      - name: Commit materialized skills
+        run: |
+          git config user.name "Mohammed Skills Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .agents/ imports/mohammed-agent-tools/catalog.json
+          if git diff --cached --quiet; then
+            echo "Agent Tools pack already materialized."
+            exit 0
+          fi
+          git commit -m "feat: materialize 358 Mohammed Agent Tools skills"
+          git push
