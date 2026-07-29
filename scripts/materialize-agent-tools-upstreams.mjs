@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { cp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 
@@ -117,8 +117,13 @@ for (const [key, group] of groups) {
       filter: (source) => basename(source) !== '.git'
     });
 
-    const hasLicense = ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'UPSTREAM_LICENSE', 'UPSTREAM_LICENSE.md', 'UPSTREAM_LICENSE.txt']
-      .some(async (name) => await exists(join(destDir, name)));
+    let hasLicense = false;
+    for (const name of ['LICENSE', 'LICENSE.md', 'LICENSE.txt', 'UPSTREAM_LICENSE', 'UPSTREAM_LICENSE.md', 'UPSTREAM_LICENSE.txt']) {
+      if (await exists(join(destDir, name))) {
+        hasLicense = true;
+        break;
+      }
+    }
     if (!hasLicense) {
       for (const name of ['LICENSE', 'LICENSE.md', 'LICENSE.txt']) {
         const candidate = join(repoDir, name);
