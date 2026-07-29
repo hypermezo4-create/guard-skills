@@ -1,4 +1,5 @@
 name: Full skills.sh mirror
+run-name: Full mirror • ${{ github.event_name }} • ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
