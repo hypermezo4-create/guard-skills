@@ -1,5 +1,6 @@
-import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { basename, join, relative } from 'node:path';
 
 const root = process.cwd();
 const skillsRoot = join(root, '.agents', 'skills');
@@ -48,30 +49,47 @@ for (const slug of dirs) {
   let markdown;
   try { markdown = await readFile(join(dir, 'SKILL.md'), 'utf8'); } catch { continue; }
   const meta = parseFrontmatter(markdown);
-  const upstream = await jsonOrNull(join(dir, '.mohammed-upstream.json')) || {};
+  const imported = await jsonOrNull(join(dir, '.mohammed-import.json'));
+  const upstream = await jsonOrNull(join(dir, '.mohammed-upstream.json'));
+  const vendor = await jsonOrNull(join(dir, '.vendor-origin.json'));
+  const origin = imported || upstream || vendor || {};
   const files = await walk(dir);
   let byteCount = 0;
   const licenseFiles = [];
-  for (const file of files) {
-    const stat = await import('node:fs/promises').then(({ stat }) => stat(file));
-    byteCount += stat.size;
-    const base = file.split(/[\\/]/).pop();
+  const contentHash = createHash('sha256');
+  for (const file of [...files].sort()) {
+    const info = await stat(file);
+    byteCount += info.size;
+    const base = basename(file);
     if (/^(license|upstream_license)/i.test(base)) licenseFiles.push(base);
+    contentHash.update(relative(dir, file).replaceAll('\\', '/'));
+    contentHash.update('\0');
+    contentHash.update(await readFile(file));
+    contentHash.update('\0');
   }
+
+  const sourceUrl = origin.sourceUrl || origin.source_url || null;
+  const sourcePath = origin.sourcePath || origin.source_path || null;
+  const source = origin.source || (sourceUrl ? sourceUrl.replace(/^https:\/\/github\.com\//, '').replace(/\.git$/, '') : 'Mohammed_AI_Agent_Tools upload');
+  const isCustom = slug.startsWith('mohammed-') && !sourceUrl;
+
   data.push({
     id: `agent-tools/${slug}`,
     slug,
     name: meta.name || slug,
     description: meta.description || 'Imported Agent Skill from Mohammed AI Agent Tools.',
-    source: upstream.source || 'Mohammed_AI_Agent_Tools upload',
-    sourceUrl: upstream.source_url || null,
-    sourcePath: upstream.source_path || null,
-    license: upstream.license || null,
+    source,
+    sourceUrl,
+    sourcePath,
+    resolvedCommit: origin.resolvedCommit || origin.commit || null,
+    license: origin.license || null,
     licenseFiles: [...new Set(licenseFiles)].sort(),
     fileCount: files.length,
     byteCount,
-    group: 'Imported Agent Tools',
+    contentSha256: contentHash.digest('hex'),
+    group: isCustom ? 'Mohammed Agent Tools' : 'Imported Upstream',
     imported: true,
+    custom: isCustom,
     reviewed: false,
     repoPath: `.agents/skills/${slug}`
   });
@@ -79,13 +97,16 @@ for (const slug of dirs) {
 
 if (data.length !== 358) throw new Error(`Expected 358 imported skills, found ${data.length}`);
 const payload = {
-  schema: 'mohammed-skills-universe/imported-agent-tools-v1',
+  schema: 'mohammed-skills-universe/imported-agent-tools-v2',
   generatedAt: new Date().toISOString(),
   count: data.length,
+  customCount: data.filter((x) => x.custom).length,
+  upstreamCount: data.filter((x) => !x.custom).length,
   payloadFiles: data.reduce((n, x) => n + x.fileCount, 0),
+  payloadBytes: data.reduce((n, x) => n + x.byteCount, 0),
   materializedRoot: '.agents/skills',
-  bundleSha256: '6d0594d7b57d98afc1907a9c00f25975f9ea58f2c8e995d6c8d2465f9c03aec8',
+  importMode: '144 custom skills from SHA-256 verified bundle + 214 skills materialized from provenance-preserving upstream Git sources',
   data
 };
 await writeFile(outPath, JSON.stringify(payload, null, 2) + '\n', 'utf8');
-console.log(`Imported Agent Tools catalog built: ${payload.count} skills, ${payload.payloadFiles} files.`);
+console.log(`Imported Agent Tools catalog built: ${payload.count} skills (${payload.customCount} custom + ${payload.upstreamCount} upstream), ${payload.payloadFiles} files.`);
