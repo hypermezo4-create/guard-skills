@@ -2,18 +2,19 @@
 
 [![skills.sh](https://skills.sh/b/hypermezo4-create/guard-skills)](https://skills.sh/hypermezo4-create/guard-skills)
 
-A full Agent Skills hub maintained by **Mohammed-MEZO** (`hypermezo4-create`). It combines the built-in guard pack, Mohammed-specific routing/auditing skills, a complete skills.sh file mirror, offline search, guarded local installation, provenance, hashes, security audits, and automated completeness verification.
+A full Agent Skills hub maintained by **Mohammed-MEZO** (`hypermezo4-create`). It combines the built-in guard pack, a curated delegate-agent pack, Mohammed-specific routing/auditing skills, a complete skills.sh file mirror, offline search, guarded local installation, provenance, hashes, security audits, and automated completeness verification.
 
-> Third-party skills remain attributed to their original authors/sources and licenses. Mohammed-MEZO is the maintainer of this mirror and its own repository-local tooling/skills, not the original author of unrelated upstream work.
+> Third-party skills remain attributed to their original authors/sources and licenses. Mohammed-MEZO is the maintainer of this aggregation and its repository-local tooling/skills, not the original author of unrelated upstream work.
 
 ## Architecture
 
-There are two layers:
+There are three practical layers:
 
-1. `skills/` — trusted repository-local skills that the normal Skills CLI can discover directly.
-2. `vendor/skills/` — the complete external universe mirror. It is intentionally isolated so thousands of third-party skills are not automatically loaded or trusted just because the files exist in this repository.
+1. `skills/` — reviewed repository-local and curated skills that the normal Skills CLI can discover directly.
+2. `third_party/` — provenance/license records for curated upstream packs.
+3. `vendor/skills/` — the broad external universe mirror. It is intentionally isolated so thousands of third-party skills are not automatically loaded or trusted just because the files exist in this repository.
 
-### Repository-local skills
+### Repository-local guard/routing skills
 
 - `clean-code-guard`
 - `test-guard`
@@ -22,6 +23,32 @@ There are two layers:
 - `woo-guard`
 - `mohammed-meta-router`
 - `mohammed-skill-auditor`
+
+## Curated delegate pack
+
+Source: `amElnagdy/delegate-skills` (MIT).
+
+Reviewed allowlist:
+
+- `claude-delegate` — delegate implementation to Claude Code CLI.
+- `codex-delegate` — delegate implementation to OpenAI Codex CLI.
+- `opencode-delegate` — delegate implementation to OpenCode CLI.
+- `agy-delegate` — delegate implementation to Google Antigravity CLI.
+- `grok-delegate` — delegate implementation to Grok Build CLI.
+- `kimi-delegate` — delegate implementation to Kimi Code CLI.
+- `qoder-delegate` — delegate implementation to Qoder CLI.
+
+Each upstream skill contains `SKILL.md`, `scripts/relay.mjs`, and four workflow references. The orchestrator writes a bounded brief, dispatches the separate implementer CLI, reviews the resulting diff/artifacts, re-runs gates, and lands the verified work itself.
+
+Sync the reviewed pack:
+
+```bash
+npm run sync:delegate
+```
+
+The sync fails closed if the upstream skill list changes, the MIT notice changes, required files disappear, or a relay script fails JavaScript syntax validation. It records the exact source commit under `third_party/delegate-skills/SOURCE.json`.
+
+The GitHub workflow `.github/workflows/sync-delegate-skills.yml` also supports manual and weekly synchronization.
 
 ## Full skills.sh mirror
 
@@ -32,7 +59,7 @@ npm run mirror:strict
 
 The mirror engine paginates through the complete all-time skills.sh catalog and, for every indexed skill, requests the detailed snapshot containing its full file tree and upstream hash. It preserves duplicate entries instead of silently filtering them, collects available external audit results, computes a deterministic local content hash, records local risk signals, stores source/license metadata when available, and mirrors the upstream files under `vendor/skills/`.
 
-Every indexed entry gets an isolated directory derived from its source, slug, and stable ID hash. That prevents two duplicate or similarly named entries from overwriting each other.
+Every indexed entry gets an isolated directory derived from its source, slug, and stable ID hash. That prevents duplicate or similarly named entries from overwriting each other.
 
 ### Prove that the mirror is complete
 
@@ -71,23 +98,25 @@ npm run install:vendored -- vercel-labs/skills/find-skills
 
 The installer resolves the exact isolated `localPath` recorded in the manifest and installs that vendored snapshot through the Skills CLI. Entries marked `blocked-by-default` are refused unless a human explicitly reviews them and intentionally supplies `--force`.
 
-## Install this repository's trusted local pack
+## Install this repository's reviewed local pack
 
 ```bash
 npx skills add hypermezo4-create/guard-skills --list
 npx skills add hypermezo4-create/guard-skills
 ```
 
-Install Mohammed's routing/auditing layer only:
+Install individual layers:
 
 ```bash
 npx skills add hypermezo4-create/guard-skills --skill mohammed-meta-router
 npx skills add hypermezo4-create/guard-skills --skill mohammed-skill-auditor
+npx skills add hypermezo4-create/guard-skills --skill codex-delegate
+npx skills add hypermezo4-create/guard-skills --skill claude-delegate
 ```
 
 ## Authentication
 
-The official skills.sh v1 API requires authenticated Vercel OIDC access. Version 2.1 uses `@vercel/oidc` and requests a valid token with an expiration buffer instead of reading one token once at process startup.
+The official skills.sh v1 API requires authenticated Vercel OIDC access. Version 2.2 uses `@vercel/oidc` and requests a valid token with an expiration buffer instead of reading one token once at process startup.
 
 ### Local setup
 
@@ -102,27 +131,21 @@ npm run mirror:strict
 
 ### GitHub Actions setup
 
-The preferred automation path needs one GitHub Actions secret:
+The preferred automation path uses the repository secret:
 
 ```text
 VERCEL_TOKEN
 ```
 
-Optional:
-
-```text
-VERCEL_SCOPE
-```
-
-The workflow uses the Vercel CLI to create/link `mohammed-skills-universe`, pulls a short-lived development OIDC environment into an ephemeral `.env.mirror`, runs the full strict mirror, deletes that environment file, and commits `vendor/` only after verification passes.
+The full-mirror workflow targets Vercel scope `mohammed-mezo`, project `mohammed-skills-universe`, obtains project-scoped OIDC, runs the strict mirror, and commits `vendor/` only after verification passes.
 
 A legacy `SKILLS_SH_TOKEN` secret can still be used as fallback, but Vercel OIDC is the preferred path.
 
 ## Automation
 
-`.github/workflows/full-mirror.yml` performs the full mirror, runs the strict completeness verifier, and commits the generated `vendor/` snapshot only after verification succeeds. It also runs on a weekly schedule and can be dispatched manually.
-
-The lighter `.github/workflows/sync-skills.yml` remains available for metadata-only catalog synchronization.
+- `.github/workflows/full-mirror.yml` — full skills.sh snapshot + strict verification.
+- `.github/workflows/sync-delegate-skills.yml` — reviewed `amElnagdy/delegate-skills` synchronization.
+- `.github/workflows/sync-skills.yml` — lighter metadata-only skills.sh synchronization.
 
 ## Generated mirror layout
 
@@ -144,6 +167,7 @@ Each `.upstream.json` records provenance, the isolated local path, upstream/loca
 ## Useful commands
 
 ```bash
+npm run sync:delegate
 npm run mirror
 npm run mirror:strict
 npm run verify:mirror
@@ -155,12 +179,12 @@ npm run validate
 
 ## Security model
 
-The repository mirrors knowledge broadly but trusts narrowly. A risky or failed-audit skill is retained for inspection and comparison, not silently deleted, while installation is blocked by default. See `SECURITY.md`.
+The repository mirrors knowledge broadly but trusts narrowly. Curated third-party packs have explicit source/structure/license checks; broad mirrored content remains isolated and risky/failed-audit entries are blocked from installation by default. See `SECURITY.md`.
 
 ## Attribution
 
-The original guard pack comes from `amElnagdy/guard-skills`. The wider skills.sh ecosystem contains independent repositories, organizations, domains, and authors. Their identity and licensing remain upstream-owned. See `ATTRIBUTION.md`.
+The original guard pack comes from `amElnagdy/guard-skills`. The delegate pack comes from `amElnagdy/delegate-skills`. The wider skills.sh ecosystem contains independent repositories, organizations, domains, and authors. Their identity and licensing remain upstream-owned. See `ATTRIBUTION.md`.
 
 ## License
 
-Repository-local code and inherited guard content remain subject to the repository's existing license. Mirrored third-party content remains subject to each upstream source's license and terms.
+Repository-local code and inherited guard content remain subject to the repository's existing license. Curated and mirrored third-party content remains subject to each upstream source's license and terms.
