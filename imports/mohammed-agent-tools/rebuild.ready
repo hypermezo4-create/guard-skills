@@ -1,0 +1,9 @@
+{
+  "schema": "mohammed-skills-universe/agent-tools-import-trigger-v2",
+  "expectedTopLevelSkills": 358,
+  "customSkills": 144,
+  "upstreamSkills": 214,
+  "customBundleSha256": "a550829b9a80688231f45e2c2a5062da7df980d0b2822a9910a2a9c35d523ca3",
+  "upstreamManifestSha256": "877bbdc84b831842f25952b6cb2d97c45b075528982bef0cbafe44e8fedaea59",
+  "pipeline": "hybrid-provenance-preserving-v2"
+}
