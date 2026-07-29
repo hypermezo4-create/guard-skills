@@ -1,11 +1,12 @@
 {
   "name": "mohammed-skills-universe",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "private": true,
   "description": "Mohammed-MEZO's provenance-preserving Agent Skills hub, catalog, delegation pack, imported Agent Tools library, and guarded mirror.",
   "type": "module",
   "scripts": {
-    "build": "node scripts/build-dashboard.mjs",
+    "build": "npm run import:agent-tools && node scripts/build-dashboard.mjs",
+    "build:dashboard": "node scripts/build-dashboard.mjs",
     "sync": "node scripts/sync-skills-sh.mjs --all-views",
     "sync:all-time": "node scripts/sync-skills-sh.mjs --view all-time",
     "sync:trending": "node scripts/sync-skills-sh.mjs --view trending",
