@@ -1,12 +1,13 @@
 {
   "name": "mohammed-skills-universe",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
-  "description": "Mohammed-MEZO's full, provenance-preserving mirror and safety layer for the open Agent Skills ecosystem.",
+  "description": "Mohammed-MEZO's provenance-preserving Agent Skills hub, catalog, delegation pack, and guarded mirror.",
   "type": "module",
   "scripts": {
     "build": "node scripts/build-dashboard.mjs",
-    "sync": "node scripts/sync-skills-sh.mjs",
+    "sync": "node scripts/sync-skills-sh.mjs --all-views",
+    "sync:all-time": "node scripts/sync-skills-sh.mjs --view all-time",
     "sync:trending": "node scripts/sync-skills-sh.mjs --view trending",
     "sync:hot": "node scripts/sync-skills-sh.mjs --view hot",
     "sync:delegate": "bash scripts/sync-delegate-skills.sh",
@@ -22,6 +23,6 @@
     "@vercel/oidc": "3.8.1"
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   }
 }
