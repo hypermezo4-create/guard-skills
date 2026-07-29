@@ -1,0 +1,47 @@
+name: Full skills.sh mirror
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 2 * * 0'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: full-skills-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      SKILLS_SH_TOKEN: ${{ secrets.SKILLS_SH_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Mirror every indexed skill with files and audits
+        run: npm run mirror
+
+      - name: Prove mirror completeness
+        run: npm run verify:mirror
+
+      - name: Commit verified mirror
+        run: |
+          if git diff --quiet -- vendor; then
+            echo 'Mirror is already current.'
+            exit 0
+          fi
+          git config user.name 'Mohammed Skills Universe Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add vendor
+          git commit -m 'chore: refresh complete skills mirror'
+          git push
