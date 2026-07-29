@@ -40,14 +40,20 @@ if (skill.installPolicy === 'blocked-by-default' && !force) {
   console.error('Inspect vendor metadata/audits first. Re-run with --force only after deliberate review.');
   process.exit(6);
 }
+if (!skill.localPath) {
+  console.error(`${skill.id} has no isolated localPath. Refresh the full mirror before installing.`);
+  process.exit(7);
+}
 
-const sourceParts = String(skill.source).split('/').map((segment) =>
-  segment.normalize('NFKC').trim().replace(/[^a-zA-Z0-9._-]/g, (c) => `_x${c.codePointAt(0).toString(16)}_`)
-);
-const safeSlug = String(skill.slug).normalize('NFKC').trim().replace(/[^a-zA-Z0-9._-]/g, (c) => `_x${c.codePointAt(0).toString(16)}_`);
-const localPath = resolve(process.cwd(), 'vendor', 'skills', ...sourceParts, safeSlug);
+const parts = String(skill.localPath).split('/');
+if (parts.some((part) => !part || part === '.' || part === '..')) {
+  console.error(`${skill.id} has an unsafe localPath.`);
+  process.exit(8);
+}
+const localPath = resolve(process.cwd(), 'vendor', ...parts);
 
 console.log(`Installing vendored snapshot: ${skill.id}`);
+console.log(`Snapshot path: ${skill.localPath}`);
 console.log(`Upstream hash: ${skill.upstreamHash || 'unknown'}`);
 console.log(`Local hash:    ${skill.localHash || 'unknown'}`);
 console.log(`Policy:        ${skill.installPolicy || 'review-before-use'}`);
