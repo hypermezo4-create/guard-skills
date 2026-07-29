@@ -1,0 +1,98 @@
+name: Deploy dashboard
+run-name: Dashboard production • ${{ github.event_name }} • ${{ github.ref_name }}
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - harden-clean-code-guard
+    paths:
+      - 'skills/**'
+      - 'scripts/build-dashboard.mjs'
+      - 'package.json'
+      - 'vercel.json'
+      - '.github/workflows/deploy-dashboard.yml'
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: deploy-dashboard-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event_name != 'issues' || startsWith(github.event.issue.title, '[deploy-dashboard]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TRIGGER_ISSUE: ${{ github.event.issue.number }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_SCOPE: mohammed-mezo
+      VERCEL_PROJECT: mohammed-skills-universe
+    steps:
+      - name: Report start
+        if: github.event_name == 'issues'
+        run: gh issue comment "$TRIGGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body 'Dashboard production deployment started.'
+
+      - uses: actions/checkout@v4
+        with:
+          ref: harden-clean-code-guard
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Require Vercel token
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${VERCEL_TOKEN:-}" ]]; then
+            echo 'VERCEL_TOKEN repository secret is missing.' >&2
+            exit 1
+          fi
+
+      - name: Validate dashboard build
+        run: |
+          npm install --no-audit --no-fund
+          npm run build
+          test -s dist/index.html
+
+      - name: Link Vercel project
+        run: npx --yes vercel@58.0.0 link --yes --project "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN"
+
+      - name: Deploy production
+        id: production
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes vercel@58.0.0 deploy --prod --yes --scope "$VERCEL_SCOPE" --token "$VERCEL_TOKEN" 2>&1 | tee /tmp/vercel-production.log
+
+      - name: Report success
+        if: success() && github.event_name == 'issues'
+        run: |
+          {
+            echo 'Dashboard production deployment completed successfully.'
+            echo
+            echo '```text'
+            tail -n 50 /tmp/vercel-production.log 2>/dev/null || true
+            echo '```'
+          } > /tmp/deploy-comment.md
+          gh issue comment "$TRIGGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body-file /tmp/deploy-comment.md
+
+      - name: Report failure
+        if: failure() && github.event_name == 'issues'
+        run: |
+          {
+            echo 'Dashboard production deployment failed.'
+            echo
+            echo '```text'
+            tail -n 80 /tmp/vercel-production.log 2>/dev/null || echo 'No Vercel deployment log was produced.'
+            echo '```'
+          } > /tmp/deploy-comment.md
+          gh issue comment "$TRIGGER_ISSUE" --repo "$GITHUB_REPOSITORY" --body-file /tmp/deploy-comment.md
