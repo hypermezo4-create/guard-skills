@@ -11,6 +11,7 @@
     "mirror": "node scripts/mirror-all-skills.mjs --prune",
     "mirror:no-audits": "node scripts/mirror-all-skills.mjs --prune --no-audits",
     "verify:mirror": "node scripts/verify-full-mirror.mjs",
+    "find:vendored": "node scripts/find-vendored-skill.mjs",
     "install:vendored": "node scripts/install-vendored-skill.mjs",
     "validate": "npx skills add . --list --full-depth"
   },
