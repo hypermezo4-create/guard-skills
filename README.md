@@ -26,12 +26,13 @@ There are two layers:
 ## Full skills.sh mirror
 
 ```bash
-npm run mirror
+npm install
+npm run mirror:strict
 ```
 
-The mirror engine paginates through the complete all-time skills.sh catalog and, for every indexed skill, requests the detailed snapshot containing its full file tree and upstream hash. It preserves duplicates instead of silently dropping them, collects available external audit results, computes a local content hash, records basic local risk signals, stores source/license metadata when available, and mirrors the upstream files under `vendor/skills/`.
+The mirror engine paginates through the complete all-time skills.sh catalog and, for every indexed skill, requests the detailed snapshot containing its full file tree and upstream hash. It preserves duplicate entries instead of silently filtering them, collects available external audit results, computes a deterministic local content hash, records local risk signals, stores source/license metadata when available, and mirrors the upstream files under `vendor/skills/`.
 
-The official API exposes stable skill IDs, full skill file trees, SHA-256 content hashes, duplicate markers, and audit results. The mirror uses those fields as its upstream source of truth.
+Every indexed entry gets an isolated directory derived from its source, slug, and stable ID hash. That prevents two duplicate or similarly named entries from overwriting each other.
 
 ### Prove that the mirror is complete
 
@@ -44,9 +45,11 @@ The verifier fails unless all of these are true:
 - manifest count equals the API-reported total;
 - zero mirror failures remain;
 - zero skill snapshots are unavailable;
+- every manifest ID and local snapshot path is unique;
 - every mirrored skill contains `SKILL.md`;
-- every local deterministic hash matches the manifest;
-- every `.upstream.json` identity/hash matches the manifest.
+- every upstream hash is present;
+- every local deterministic hash matches the mirrored files;
+- every `.upstream.json` identity, path, and hash matches the manifest.
 
 A run is not called complete unless this command passes.
 
@@ -66,7 +69,7 @@ Search works against the local `vendor/manifest.json`, so discovery does not req
 npm run install:vendored -- vercel-labs/skills/find-skills
 ```
 
-The installer resolves the exact vendored snapshot and installs from the local directory through the Skills CLI. Entries marked `blocked-by-default` are refused unless a human explicitly reviews them and intentionally supplies `--force`.
+The installer resolves the exact isolated `localPath` recorded in the manifest and installs that vendored snapshot through the Skills CLI. Entries marked `blocked-by-default` are refused unless a human explicitly reviews them and intentionally supplies `--force`.
 
 ## Install this repository's trusted local pack
 
@@ -84,17 +87,40 @@ npx skills add hypermezo4-create/guard-skills --skill mohammed-skill-auditor
 
 ## Authentication
 
-The official skills.sh v1 API requires authenticated Vercel OIDC access. The mirror accepts a current token via:
+The official skills.sh v1 API requires authenticated Vercel OIDC access. Version 2.1 uses `@vercel/oidc` and requests a valid token with an expiration buffer instead of reading one token once at process startup.
+
+### Local setup
 
 ```bash
-VERCEL_OIDC_TOKEN=... npm run mirror
+vercel link
+vercel env pull .env.local --yes --environment=development
+set -a && source .env.local && set +a
+npm run mirror:strict
 ```
 
-For automation it also accepts the compatibility environment name `SKILLS_SH_TOKEN`. Tokens are never written into generated files.
+`SKILLS_SH_TOKEN` remains supported only as an explicit compatibility fallback. Authentication values are never written into generated mirror files.
+
+### GitHub Actions setup
+
+The preferred automation path needs one GitHub Actions secret:
+
+```text
+VERCEL_TOKEN
+```
+
+Optional:
+
+```text
+VERCEL_SCOPE
+```
+
+The workflow uses the Vercel CLI to create/link `mohammed-skills-universe`, pulls a short-lived development OIDC environment into an ephemeral `.env.mirror`, runs the full strict mirror, deletes that environment file, and commits `vendor/` only after verification passes.
+
+A legacy `SKILLS_SH_TOKEN` secret can still be used as fallback, but Vercel OIDC is the preferred path.
 
 ## Automation
 
-`.github/workflows/full-mirror.yml` performs the full mirror, runs the completeness verifier, and commits the generated `vendor/` snapshot only after verification succeeds. It also runs on a weekly schedule and can be dispatched manually.
+`.github/workflows/full-mirror.yml` performs the full mirror, runs the strict completeness verifier, and commits the generated `vendor/` snapshot only after verification succeeds. It also runs on a weekly schedule and can be dispatched manually.
 
 The lighter `.github/workflows/sync-skills.yml` remains available for metadata-only catalog synchronization.
 
@@ -107,18 +133,19 @@ vendor/
 ├── failures.json
 ├── licenses.json
 └── skills/
-    └── <source...>/<slug>/
+    └── <source...>/<slug>--<id-hash>/
         ├── SKILL.md
         ├── ...all upstream skill files...
         └── .upstream.json
 ```
 
-Each `.upstream.json` records provenance, upstream/local hashes, install count, duplicate status, audits, license metadata when available, local risk findings, and installation policy.
+Each `.upstream.json` records provenance, the isolated local path, upstream/local hashes, install count, duplicate status, audits, license metadata when available, local risk findings, and installation policy.
 
 ## Useful commands
 
 ```bash
 npm run mirror
+npm run mirror:strict
 npm run verify:mirror
 npm run find:vendored -- <query>
 npm run install:vendored -- <skill-id>
