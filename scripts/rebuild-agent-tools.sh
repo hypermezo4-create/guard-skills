@@ -7,22 +7,26 @@ SKILLS_DIR="$ROOT/.agents/skills"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR" "$ROOT/.agent-tools-upstream-cache"' EXIT
 
-CUSTOM_B64="$IMPORT_DIR/mohammed-custom-144.tar.xz.b64"
-UPSTREAM_B64="$IMPORT_DIR/upstream-manifest.json.xz.b64"
+CUSTOM_BUNDLE_DIR="$IMPORT_DIR/custom-bundle"
+UPSTREAM_B64="$IMPORT_DIR/upstream-manifest.exact.b64"
 CUSTOM_SHA="a550829b9a80688231f45e2c2a5062da7df980d0b2822a9910a2a9c35d523ca3"
 UPSTREAM_SHA="877bbdc84b831842f25952b6cb2d97c45b075528982bef0cbafe44e8fedaea59"
 EXPECTED_SLUG_SET_SHA="0f4aaa0426a443cf6cafebfa924b2a3c3bbfddfd50191881fe12fa48725c5321"
 
-[[ -s "$CUSTOM_B64" ]] || { echo "missing $CUSTOM_B64" >&2; exit 1; }
+for part in 000 001 002; do
+  [[ -s "$CUSTOM_BUNDLE_DIR/part-$part.b64" ]] || { echo "missing custom bundle part-$part.b64" >&2; exit 1; }
+done
 [[ -s "$UPSTREAM_B64" ]] || { echo "missing $UPSTREAM_B64" >&2; exit 1; }
 
-base64 --decode "$CUSTOM_B64" > "$TMP_DIR/custom.tar.xz"
+cat "$CUSTOM_BUNDLE_DIR"/part-000.b64 "$CUSTOM_BUNDLE_DIR"/part-001.b64 "$CUSTOM_BUNDLE_DIR"/part-002.b64 \
+  | tr -d '\r\n\t ' \
+  | base64 --decode > "$TMP_DIR/custom.tar.xz"
 ACTUAL_CUSTOM_SHA="$(sha256sum "$TMP_DIR/custom.tar.xz" | awk '{print $1}')"
-[[ "$ACTUAL_CUSTOM_SHA" == "$CUSTOM_SHA" ]] || { echo "custom bundle sha256 mismatch" >&2; exit 1; }
+[[ "$ACTUAL_CUSTOM_SHA" == "$CUSTOM_SHA" ]] || { echo "custom bundle sha256 mismatch: expected $CUSTOM_SHA, got $ACTUAL_CUSTOM_SHA" >&2; exit 1; }
 
-base64 --decode "$UPSTREAM_B64" > "$TMP_DIR/upstream-manifest.json.xz"
+tr -d '\r\n\t ' < "$UPSTREAM_B64" | base64 --decode > "$TMP_DIR/upstream-manifest.json.xz"
 ACTUAL_UPSTREAM_SHA="$(sha256sum "$TMP_DIR/upstream-manifest.json.xz" | awk '{print $1}')"
-[[ "$ACTUAL_UPSTREAM_SHA" == "$UPSTREAM_SHA" ]] || { echo "upstream manifest sha256 mismatch" >&2; exit 1; }
+[[ "$ACTUAL_UPSTREAM_SHA" == "$UPSTREAM_SHA" ]] || { echo "upstream manifest sha256 mismatch: expected $UPSTREAM_SHA, got $ACTUAL_UPSTREAM_SHA" >&2; exit 1; }
 xz --decompress --stdout "$TMP_DIR/upstream-manifest.json.xz" > "$TMP_DIR/upstream-manifest.json"
 
 if tar -tJf "$TMP_DIR/custom.tar.xz" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
