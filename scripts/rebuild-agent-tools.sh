@@ -11,6 +11,7 @@ CUSTOM_B64="$IMPORT_DIR/mohammed-custom-144.tar.xz.b64"
 UPSTREAM_B64="$IMPORT_DIR/upstream-manifest.json.xz.b64"
 CUSTOM_SHA="a550829b9a80688231f45e2c2a5062da7df980d0b2822a9910a2a9c35d523ca3"
 UPSTREAM_SHA="877bbdc84b831842f25952b6cb2d97c45b075528982bef0cbafe44e8fedaea59"
+EXPECTED_SLUG_SET_SHA="0f4aaa0426a443cf6cafebfa924b2a3c3bbfddfd50191881fe12fa48725c5321"
 
 [[ -s "$CUSTOM_B64" ]] || { echo "missing $CUSTOM_B64" >&2; exit 1; }
 [[ -s "$UPSTREAM_B64" ]] || { echo "missing $UPSTREAM_B64" >&2; exit 1; }
@@ -42,6 +43,12 @@ node "$ROOT/scripts/materialize-agent-tools-upstreams.mjs" "$TMP_DIR/upstream-ma
 FINAL_COUNT="$(find "$SKILLS_DIR" -mindepth 2 -maxdepth 2 -name SKILL.md -type f | wc -l | tr -d ' ')"
 [[ "$FINAL_COUNT" == "358" ]] || { echo "expected 358 top-level skills, found $FINAL_COUNT" >&2; exit 1; }
 
+ACTUAL_SLUG_SET_SHA="$(find "$SKILLS_DIR" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort | sha256sum | awk '{print $1}')"
+[[ "$ACTUAL_SLUG_SET_SHA" == "$EXPECTED_SLUG_SET_SHA" ]] || {
+  echo "358-skill inventory identity mismatch: expected $EXPECTED_SLUG_SET_SHA, got $ACTUAL_SLUG_SET_SHA" >&2
+  exit 1
+}
+
 TOTAL_SKILL_FILES="$(find "$SKILLS_DIR" -name SKILL.md -type f | wc -l | tr -d ' ')"
 PAYLOAD_FILES="$(find "$SKILLS_DIR" -type f | wc -l | tr -d ' ')"
 
@@ -53,6 +60,7 @@ This tree was materialized from the user-provided `Mohammed_AI_Agent_Tools(1).zi
 - Verified top-level skills: **$FINAL_COUNT**
 - Mohammed custom skills: **$CUSTOM_COUNT**
 - Upstream-backed skills: **$((FINAL_COUNT - CUSTOM_COUNT))**
+- Inventory slug-set SHA-256: `$ACTUAL_SLUG_SET_SHA`
 - Recursive SKILL.md files: **$TOTAL_SKILL_FILES**
 - Materialized files: **$PAYLOAD_FILES**
 - Custom bundle SHA-256: `$ACTUAL_CUSTOM_SHA`
@@ -61,4 +69,4 @@ This tree was materialized from the user-provided `Mohammed_AI_Agent_Tools(1).zi
 Third-party authorship and licenses remain with their upstream authors. Each upstream-backed skill records its source path and resolved Git commit in `.mohammed-import.json`.
 MARKER
 
-echo "Agent Tools materialization PASSED: $FINAL_COUNT top-level skills, $TOTAL_SKILL_FILES SKILL.md files, $PAYLOAD_FILES total files."
+echo "Agent Tools materialization PASSED: $FINAL_COUNT exact top-level skills, slug inventory $ACTUAL_SLUG_SET_SHA, $TOTAL_SKILL_FILES SKILL.md files, $PAYLOAD_FILES total files."
