@@ -29,7 +29,8 @@ jobs:
     timeout-minutes: 330
     env:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-      VERCEL_SCOPE: ${{ secrets.VERCEL_SCOPE }}
+      VERCEL_SCOPE: mohammed-mezo
+      VERCEL_PROJECT: mohammed-skills-universe
       SKILLS_SH_TOKEN: ${{ secrets.SKILLS_SH_TOKEN }}
       GITHUB_TOKEN: ${{ github.token }}
     steps:
@@ -44,39 +45,53 @@ jobs:
       - name: Install mirror runtime
         run: npm install --no-audit --no-fund
 
-      - name: Bootstrap refreshable Vercel OIDC
+      - name: Bootstrap project-scoped Vercel OIDC
+        if: env.VERCEL_TOKEN != ''
         shell: bash
         run: |
           set -euo pipefail
-          if [[ -n "${VERCEL_TOKEN:-}" ]]; then
-            args=(--yes --project mohammed-skills-universe --token "$VERCEL_TOKEN")
-            if [[ -n "${VERCEL_SCOPE:-}" ]]; then
-              args+=(--scope "$VERCEL_SCOPE")
-            fi
-            npx --yes vercel@58.0.0 link "${args[@]}"
-            npx --yes vercel@58.0.0 env pull .env.mirror --yes --environment=development --token="$VERCEL_TOKEN"
-            echo 'Using Vercel OIDC authentication for skills.sh.'
-          elif [[ -n "${SKILLS_SH_TOKEN:-}" ]]; then
-            echo 'VERCEL_TOKEN is not configured; using SKILLS_SH_TOKEN fallback.'
-          else
-            echo 'Missing authentication. Configure repository secret VERCEL_TOKEN (preferred) or SKILLS_SH_TOKEN.' >&2
+
+          if ! npx --yes vercel@58.0.0 project inspect "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE" >/dev/null 2>&1; then
+            npx --yes vercel@58.0.0 project add "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE"
+          fi
+
+          npx --yes vercel@58.0.0 link --yes --project "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE"
+
+          oidc_json="$(npx --yes vercel@58.0.0 project token "$VERCEL_PROJECT" --scope "$VERCEL_SCOPE" --format=json)"
+          oidc_token="$(node -e '
+            const value = JSON.parse(process.argv[1]);
+            const strings = [];
+            const walk = (v) => {
+              if (typeof v === "string") strings.push(v);
+              else if (Array.isArray(v)) for (const item of v) walk(item);
+              else if (v && typeof v === "object") for (const item of Object.values(v)) walk(item);
+            };
+            walk(value);
+            const token = strings.find((v) => v.startsWith("eyJ") && v.split(".").length === 3);
+            if (!token) process.exit(2);
+            process.stdout.write(token);
+          ' "$oidc_json")"
+
+          if [[ -z "$oidc_token" ]]; then
+            echo 'Vercel returned no project OIDC token.' >&2
+            exit 1
+          fi
+
+          echo "::add-mask::$oidc_token"
+          echo "VERCEL_OIDC_TOKEN=$oidc_token" >> "$GITHUB_ENV"
+          echo 'Project-scoped Vercel OIDC is ready.'
+
+      - name: Require an authentication path
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${VERCEL_OIDC_TOKEN:-}" && -z "${SKILLS_SH_TOKEN:-}" ]]; then
+            echo 'Authentication unavailable. Verify the VERCEL_TOKEN repository secret.' >&2
             exit 1
           fi
 
       - name: Mirror and prove every indexed snapshot
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ -f .env.mirror ]]; then
-            set -a
-            source .env.mirror
-            set +a
-          fi
-          npm run mirror:strict
-
-      - name: Remove ephemeral credentials
-        if: always()
-        run: rm -f .env.mirror
+        run: npm run mirror:strict
 
       - name: Commit verified mirror
         run: |
