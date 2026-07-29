@@ -1,6 +1,6 @@
 {
   "name": "mohammed-skills-universe",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "Mohammed-MEZO's full, provenance-preserving mirror and safety layer for the open Agent Skills ecosystem.",
   "type": "module",
@@ -15,6 +15,9 @@
     "find:vendored": "node scripts/find-vendored-skill.mjs",
     "install:vendored": "node scripts/install-vendored-skill.mjs",
     "validate": "npx skills add . --list --full-depth"
+  },
+  "dependencies": {
+    "@vercel/oidc": "3.8.1"
   },
   "engines": {
     "node": ">=20"
