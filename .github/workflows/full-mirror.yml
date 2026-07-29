@@ -4,6 +4,16 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '41 2 * * 0'
+  push:
+    branches:
+      - harden-clean-code-guard
+    paths:
+      - 'scripts/mirror-all-skills.mjs'
+      - 'scripts/verify-full-mirror.mjs'
+      - 'scripts/install-vendored-skill.mjs'
+      - 'scripts/find-vendored-skill.mjs'
+      - '.github/workflows/full-mirror.yml'
+      - 'package.json'
 
 permissions:
   contents: write
